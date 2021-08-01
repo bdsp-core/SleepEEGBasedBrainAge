@@ -7,7 +7,7 @@ from tqdm import tqdm
 from load_dataset import *
 
 
-def convert_to_edf(input_path, output_path, dataset):
+def convert_to_edf(input_path, annot_path, output_path, dataset):
     """
     """
     _load_dataset = eval(f'load_{dataset}_dataset')
@@ -123,7 +123,7 @@ if __name__=='__main__':
         
         try:
             if not os.path.exists(edf_path) or not os.path.exists(xml_path):
-                signal_len, Fs, start_time, annot = convert_to_edf(signal_path, edf_path, dataset)
+                signal_len, Fs, start_time, annot = convert_to_edf(signal_path, annot_path, edf_path, dataset)
                 convert_to_xml(annot, xml_path, Fs)
         except Exception as ee:
             # if anything goes wrong, ignore this file
