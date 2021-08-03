@@ -151,6 +151,7 @@ if __name__=='__main__':
             if not os.path.exists(feature_path):
                 D = len(ba_features[-1])  #TODO assume the previous feature file is found
                 ba_features.append([np.nan]*D)
+                ba_features_no_log.append([np.nan]*D)
                 artifact_ratios.append(np.nan)
                 num_missing_stages.append(np.nan)
                 continue
