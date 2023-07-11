@@ -1,58 +1,78 @@
+import datetime
 import os
+import sys
 import pickle
 import numpy as np
 import pandas as pd
-import sys
-from load_dataset import *
+import scipy.io as sio
+from tqdm import tqdm
 
 
-if __name__ == '__main__':
-    dataset = sys.argv[1].strip()
-    
+def main():
     output_ba_dir = 'output_BA'
-    if not os.path.exists(output_ba_dir): os.mkdir(output_ba_dir)
+    os.makedirs(output_ba_dir, exist_ok=True)
     
     # load brain age model
-    _get_brain_age_dir = eval(f'get_{dataset}_brain_age_dir')
-    brain_age_dir = _get_brain_age_dir()
+    brain_age_dir = 'brain_age_model_fco'
     feature_names = list(pd.read_csv(os.path.join(brain_age_dir, 'BA_features_used.csv')).feature.values)
     sys.path.insert(0, brain_age_dir)
     with open(os.path.join(brain_age_dir, 'stable_brain_age_model.pickle'), 'rb') as ff:
         model = pickle.load(ff)
     
     # get list of subjects
-    df_mastersheet = pd.read_excel('mastersheet.xlsx')
-    df_mastersheet = df_mastersheet[df_mastersheet.Dataset==dataset].reset_index(drop=True)
+    df = pd.read_excel('mastersheet.xlsx')
+    feature_dir = 'features'
     
     # read features
-    feature_dir = 'features'
-    df_feat = pd.read_csv(os.path.join(feature_dir, f'combined_features_no_log_{dataset}.csv'))
-    assert np.all(df_mastersheet.SID==df_feat.SID)
-    
-    # match the feature names in model
-    df_feat = df_feat.rename(columns={x:x.replace('/','_') for x in df_feat.columns if '/' in x})
-    
-    stages = ['W','N1','N2','N3','R']
-    _get_channels = eval(f'get_{dataset}_channels')
-    ch_names, standard_ch_names, pair_ch_ids, combined_ch_names = _get_channels()
-    for c1, c2 in zip(pair_ch_ids, combined_ch_names):
-        for stage in stages:
-            df_feat[f'kurtosis_{stage}_{c2}'] = (df_feat[f'kurtosis_{ch_names[c1[0]]}_{stage}']+df_feat[f'kurtosis_{ch_names[c1[1]]}_{stage}'])/2
+    df_res = df[['SID', 'Age']]
+    for i in tqdm(range(len(df))):
+        sid = df.SID.iloc[i]
+        df_feat = pd.read_csv(os.path.join(feature_dir, f'features_{sid}_no_log.csv'))
+        mat = sio.loadmat(os.path.join(feature_dir, f'features_{sid}.mat'),
+                variable_names=['EEG_channels',
+                    'combined_EEG_channels', 'combined_EEG_channels_ids',
+                    'artifact_ratio', 'num_missing_stage'])
+        combined_EEG_channels = np.char.strip(mat['combined_EEG_channels'].flatten())
+        combined_EEG_channels_ids = mat['combined_EEG_channels_ids']
+        EEG_channels = np.char.strip(mat['EEG_channels'].flatten())
+        artifact_ratio = float(mat['artifact_ratio'])
+        num_missing_stage = int(mat['num_missing_stage'])
         
-    # read spindle features
-    df_sp = pd.read_csv(os.path.join(feature_dir, f'spindle_features_N2_channel_avg_{dataset}.csv'))
-    assert np.all(df_mastersheet.SID==df_sp.SID)
-    
-    # compute brain age
-    # model contains all preprocessing and adjustment steps
-    X = pd.concat([df_feat, df_sp], axis=1)[feature_names].values
-    CA = df_mastersheet.Age.values
-    BA = model.predict(X, y=CA)
-    BAI = BA-CA
-    
-    df_feat['BA'] = BA
-    df_feat['BAI'] = BAI
-    df_feat = df_feat[['SID', 'Dataset', 'Age', 'Gender', 'BA', 'BAI', 'NumMissingStage', 'ArtifactRatio']]
+        # match the feature names in model
+        df_feat = df_feat.rename(columns={x:x.replace('/','_') for x in df_feat.columns if '/' in x})
+        
+        stages = ['W','N1','N2','N3','R']
+        for c1, c2 in zip(combined_EEG_channels_ids, combined_EEG_channels):
+            for stage in stages:
+                df_feat[f'kurtosis_{stage}_{c2}'] = (df_feat[f'kurtosis_{EEG_channels[c1[0]]}_{stage}']+df_feat[f'kurtosis_{EEG_channels[c1[1]]}_{stage}'])/2
+            
+        # read spindle features
+        df_sp = pd.read_csv(os.path.join(feature_dir, f'spindle_features_{sid}.csv'))
+        
+        # compute brain age
+        # model contains all preprocessing and adjustment steps
+        X = df_feat.merge(df_sp, on='SID', how='inner')[feature_names].values
 
-    df_feat.to_csv(os.path.join(output_ba_dir, f'stable_BA_{dataset}.csv'), index=False)
+        # COUPL_OVERLAP has different mean, remove that feature
+        #for chn in combined_EEG_channels:
+        #    if 'COUPL_OVERLAP_'+chn in feature_names:
+        #        idx = feature_names.index('COUPL_OVERLAP_'+chn)
+        #        X[:,idx] = model.steps[0][1].mean_[idx]
+
+        CA = df.Age.iloc[i]
+        if pd.isna(CA):
+            CA = 70
+        BA = model.predict(X, y=CA)[0]
+        
+        df_res.loc[i, 'RobustBA'] = BA
+        df_res.loc[i, 'artifact_ratio'] = artifact_ratio
+        df_res.loc[i, 'num_missing_stage'] = num_missing_stage
+
+    print(df_res)
+    now = datetime.datetime.now().strftime('%H%M%d_%m%d%Y')
+    df_res.to_csv(os.path.join(output_ba_dir, f'robust_BA_{now}.csv'), index=False)
     
+
+if __name__ == '__main__':
+    main()
+

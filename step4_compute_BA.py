@@ -1,11 +1,10 @@
+import datetime
 import os
 import pickle
-import sys
 import numpy as np
 import pandas as pd
 import scipy.io as sio
 from tqdm import tqdm
-from load_dataset import *
 
 
 #TODO sklearn.KNNImputer
@@ -30,15 +29,12 @@ def impute_missing_stage(X, K, Xnonan=None):
         return X_
         
         
-if __name__=='__main__':
-    dataset = sys.argv[1].strip()
-    
+def main():
     output_ba_dir = 'output_BA'
-    if not os.path.exists(output_ba_dir): os.mkdir(output_ba_dir)
+    os.makedirs(output_ba_dir, exist_ok=True)
     
     # load brain age model
-    _get_brain_age_dir = eval(f'get_{dataset}_brain_age_dir')
-    brain_age_dir = _get_brain_age_dir()
+    brain_age_dir = 'brain_age_model_fco'
     Xnonan = sio.loadmat(os.path.join(brain_age_dir, 'mgh_eeg_data.mat'))['Xtr']
     KNN_K = 10  # number of patients without any missing stage to average
     with open(os.path.join(brain_age_dir, 'feature_normalizer_eeg.pickle'), 'rb') as f:
@@ -50,35 +46,44 @@ if __name__=='__main__':
     df_BA_adj.loc[len(df_BA_adj)-1, 'CA_max'] = np.inf
         
     # get list of subjects
-    df_mastersheet = pd.read_excel('mastersheet.xlsx')
-    df_mastersheet = df_mastersheet[df_mastersheet.Dataset==dataset].reset_index(drop=True)
-    
-    # read features
+    df = pd.read_excel('mastersheet.xlsx')
     feature_dir = 'features'
-    df_feat = pd.read_csv(os.path.join(feature_dir, f'combined_features_{dataset}.csv'))
-    assert np.all(df_feat.SID==df_mastersheet.SID)
-    X = df_feat.iloc[:,6:].values
+    
+    df_res = df[['SID', 'Age']]
+    for i in tqdm(range(len(df))):
+        sid = df.SID.iloc[i]
+        # read features
+        df_feat = pd.read_csv(os.path.join(feature_dir, f'features_{sid}.csv'))
+        X = df_feat.iloc[:,1:].values
+        mat = sio.loadmat(os.path.join(feature_dir, f'features_{sid}.mat'), variable_names=['artifact_ratio', 'num_missing_stage'])
+        artifact_ratio = float(mat['artifact_ratio'])
+        num_missing_stage = int(mat['num_missing_stage'])
 
-    # pre-process
-    if np.any(np.isnan(X)):
-        #X = KNNImputer(n_neighbors=KNN_K).fit_transform(X)
-        X = impute_missing_stage(X, KNN_K, Xnonan=Xnonan)
-    X = (X-feature_mean)/feature_std
+        # pre-process
+        if np.any(np.isnan(X)):
+            #X = KNNImputer(n_neighbors=KNN_K).fit_transform(X)
+            X = impute_missing_stage(X, KNN_K, Xnonan=Xnonan)
+        X = (X-feature_mean)/feature_std
 
-    # compute brain age
-    BAs = np.logaddexp(np.dot(X, brain_age_coef)+brain_age_intercept, 0)
+        # compute brain age
+        BA = np.logaddexp(np.dot(X, brain_age_coef)+brain_age_intercept, 0)[0]
 
-    # adjust BA
-    BA_adjs = []
-    for si in range(len(df_mastersheet)):
-        CA = df_mastersheet.Age.iloc[si]
-        idx = np.where((df_BA_adj.CA_min<=CA)&(df_BA_adj.CA_max>CA))[0][0]
-        adj = df_BA_adj.bias.iloc[idx]
-        BA_adjs.append(adj)
+        # adjust BA
+        if 'Age' in df.columns:
+            CA = df.Age.iloc[i]
+            if pd.notna(CA):
+                idx = np.where((df_BA_adj.CA_min<=CA)&(df_BA_adj.CA_max>CA))[0][0]
+                BA += df_BA_adj.bias.iloc[idx]
 
-    df_feat['BA'] = BAs+np.array(BA_adjs)
-    df_feat['BAI'] = df_feat.BA - df_mastersheet.Age
+        df_res.loc[i, 'BA'] = BA
+        df_res.loc[i, 'artifact_ratio'] = artifact_ratio
+        df_res.loc[i, 'num_missing_stage'] = num_missing_stage
 
-    df_feat = df_feat[['SID', 'Dataset', 'Age', 'Gender', 'BA', 'BAI', 'NumMissingStage', 'ArtifactRatio']]
-    df_feat.to_csv(os.path.join(output_ba_dir, f'BA_{dataset}.csv'), index=False)
+    print(df_res)
+    now = datetime.datetime.now().strftime('%H%M%d_%m%d%Y')
+    df_res.to_csv(os.path.join(output_ba_dir, f'BA_{now}.csv'), index=False)
+
+
+if __name__=='__main__':
+    main()
 

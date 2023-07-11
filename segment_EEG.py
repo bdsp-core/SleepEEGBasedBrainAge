@@ -1,26 +1,26 @@
 import numpy as np
 from scipy.signal import detrend
 from scipy.stats import mode
-from joblib import Parallel, delayed
+#from joblib import Parallel, delayed
 from mne.filter import filter_data, notch_filter
-from scikits.samplerate import resample
+#from scikits.samplerate import resample
+from scipy.signal import resample
 from mne.time_frequency import psd_array_multitaper
 
 
 epoch_status_explanation = [
-    'normal',
+    'clean',
     'NaN in sleep stage',
     'NaN in EEG',
     'overly high/low amplitude',
     'flat signal']
 
 
-def segment_EEG(EEG, labels, window_time, step_time, Fs, newFs=200, notch_freq=None, bandpass_freq=None, start_end_remove_window_num=0, amplitude_thres=500, n_jobs=1, to_remove_mean=False):#
+def segment_EEG(EEG, window_time, step_time, Fs, newFs=200, notch_freq=None, bandpass_freq=None, start_end_remove_window_num=0, amplitude_thres=500, n_jobs=1, to_remove_mean=False):#
     """Segment EEG signals.
 
     Arguments:
     EEG -- np.ndarray, size=(channel_num, sample_num)
-    labels -- np.ndarray, size=(sample_num,)
     window_time -- in seconds
     step_time -- in seconds
     Fs -- in Hz
@@ -47,26 +47,9 @@ def segment_EEG(EEG, labels, window_time, step_time, Fs, newFs=200, notch_freq=N
     start_ids = np.arange(0, EEG.shape[1]-window_size+1, step_size)
     if start_end_remove_window_num>0:
         start_ids = start_ids[start_end_remove_window_num:-start_end_remove_window_num]
-    labels_ = []
-    for si in start_ids:
-        labels2 = labels[si:si+window_size]
-        labels2[np.isinf(labels2)] = np.nan
-        labels2[np.isnan(labels2)] = -1
-        label__ = mode(labels2).mode[0]
-        if label__==-1:
-            labels_.append(np.nan)
-        else:
-            labels_.append(label__)
-    labels = np.array(labels_)
     
-    # first assign normal to all epoch status
+    # first assign clean to all epoch status
     epoch_statuss = [epoch_status_explanation[0]]*len(start_ids)
-    
-    # check nan sleep stage
-    if np.any(np.isnan(labels)):
-        ids = np.where(np.isnan(labels))[0]
-        for i in ids:
-            epoch_statuss[i] = epoch_status_explanation[1]
     
     if notch_freq is not None and Fs/2>notch_freq:# and bandpass_freq is not None and np.max(bandpass_freq)>=notch_freq:
         EEG = notch_filter(EEG, Fs, notch_freq, fir_design="firwin", verbose=False)  # (#window, #ch, window_size+2padding)
@@ -83,9 +66,11 @@ def segment_EEG(EEG, labels, window_time, step_time, Fs, newFs=200, notch_freq=N
     
     # resample
     if Fs!=newFs:
-        r = newFs*1./Fs
-        EEG = Parallel(n_jobs=n_jobs, verbose=False)(delayed(resample)(EEG[i], r, 'sinc_best') for i in range(len(EEG)))
-        EEG = np.array(EEG).astype(float)
+        #r = newFs*1./Fs
+        #EEG = Parallel(n_jobs=n_jobs, verbose=False)(delayed(resample)(EEG[i], r, 'sinc_best') for i in range(len(EEG)))
+        #EEG = np.array(EEG).astype(float)
+        Nnew = int(round(EEG.shape[1]/Fs*newFs))
+        EEG = resample(EEG, Nnew, axis=1)
         Fs = newFs
         window_size = int(round(window_time*Fs))
         step_size = int(round(step_time*Fs))
@@ -97,7 +82,7 @@ def segment_EEG(EEG, labels, window_time, step_time, Fs, newFs=200, notch_freq=N
     # get quantiles
     EEG2 = np.array(EEG)
     EEG2[np.abs(EEG2)<1e-5] = np.nan
-    q1,q2,q3 = np.nanpercentile(EEG2, (25,50,75), axis=1)
+    qs = np.nanpercentile(EEG2, (25,50,75), axis=1)
     
     #segment into epochs
     EEG_segs = EEG[:,list(map(lambda x:np.arange(x-padding,x+window_size+padding), start_ids))].transpose(1,0,2)  # (#window, #ch, window_size+2padding)
@@ -112,7 +97,6 @@ def segment_EEG(EEG, labels, window_time, step_time, Fs, newFs=200, notch_freq=N
     if fmax is None:
         fmax = np.inf
     specs, freq = psd_array_multitaper(EEG_segs, Fs, fmin=fmin, fmax=fmax, adaptive=False, low_bias=True, n_jobs=n_jobs, verbose='ERROR', bandwidth=BW, normalization='full')
-    specs = specs.transpose(0,2,1)
     
     nan2d = np.any(np.isnan(EEG_segs), axis=2)
     nan1d = np.where(np.any(nan2d, axis=1))[0]
@@ -132,20 +116,15 @@ def segment_EEG(EEG, labels, window_time, step_time, Fs, newFs=200, notch_freq=N
     flat1d = np.where(np.any(flat2d, axis=1))[0]
     for i in flat1d:
         epoch_statuss[i] = epoch_status_explanation[4]
-    
-    # normalize signal
-    nch = EEG_segs.shape[1]
-    EEG_segs = (EEG_segs - q2.reshape(1,nch,1)) / (q3.reshape(1,nch,1)-q1.reshape(1,nch,1))
-    
-    lens = [len(EEG_segs), len(labels), len(start_ids), len(epoch_statuss), len(specs)]
+     
+    lens = [len(EEG_segs), len(start_ids), len(epoch_statuss), len(specs)]
     if len(set(lens))>1:
         minlen = min(lens)
         EEG_segs = EEG_segs[:minlen]
-        labels = labels[:minlen]
         start_ids = start_ids[:minlen]
         epoch_statuss = epoch_statuss[:minlen]
         specs = specs[:minlen]
 
-    return EEG_segs, labels, start_ids, np.array(epoch_statuss), specs, freq
+    return EEG_segs, start_ids, np.array(epoch_statuss), specs, freq, qs
 
 

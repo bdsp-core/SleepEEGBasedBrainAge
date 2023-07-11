@@ -60,9 +60,11 @@ class BiasCorrection(BaseEstimator, RegressorMixin):
         return self
         
     def predict(self, yp, y=None):
+        if y is None or np.isnan(y):
+            return yp
+
         if self.method=='lr':
             yp2 = yp - (self.correction_slope*y + self.correction_intercept)
-
         # softplus
         yp2 = np.log1p(np.exp(-np.abs(yp2))) + np.maximum(yp2,0)
         return yp2

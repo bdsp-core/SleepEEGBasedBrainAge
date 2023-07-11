@@ -1,0 +1,6 @@
+library(luna)
+k<-ldb("D:\projects\SleepEEGBasedBrainAge\features\luna_output.db")
+d1<-lx(k,"SPINDLES", "CH_F")
+d2<-lx(k,"SPINDLES", "CH")
+d3 <- merge(d1,d2,by=c("ID","CH"))
+write.csv(d3, "D:\projects\SleepEEGBasedBrainAge\features\luna_output.csv") 
