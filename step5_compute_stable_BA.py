@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import scipy.io as sio
 from tqdm import tqdm
+from step4_compute_BA import get_perc
 
 
 def main():
@@ -23,8 +24,10 @@ def main():
     df = pd.read_excel('mastersheet.xlsx')
     feature_dir = 'features'
     
+    df_ref = pd.read_csv('BAI_MGH_healthy.csv')
+
     # read features
-    df_res = df[['SID', 'Age']]
+    df_res = df.drop(columns='SignalPath')
     for i in tqdm(range(len(df))):
         sid = df.SID.iloc[i]
         df_feat = pd.read_csv(os.path.join(feature_dir, f'features_{sid}_no_log.csv'))
@@ -59,12 +62,32 @@ def main():
         #        idx = feature_names.index('COUPL_OVERLAP_'+chn)
         #        X[:,idx] = model.steps[0][1].mean_[idx]
 
-        CA = df.Age.iloc[i]
-        if pd.isna(CA):
-            CA = 70
-        BA = model.predict(X, y=CA)[0]
+        age = df.Age.iloc[i]
+        sex = df.Sex.iloc[i]
+        bmi = df.BMI.iloc[i]
+        if type(sex)==str:
+            if sex.lower()=='m':
+                sex = 1
+            elif sex.lower()=='f':
+                sex = 0
+        if sex not in [0,1]:
+            print(f'Unknown sex encoding (M or 1, F or 0): {sex}\nIgnore it.')
+            sex = np.nan
+
+        age2 = 70 if pd.isna(age) else age
+        BA = model.predict(X, y=age2)[0]
+
+        # get BAI
+        BAI = BA-age
+
+        # get BAI percent
+        BAI_perc = np.nan
+        if pd.notna(BAI) and (pd.notna(age)|pd.notna(sex)|pd.notna(bmi)):
+            BAI_perc, hist = get_perc(BAI, age, sex, bmi, df_ref, 'BAI', plot=True, fig_path=os.path.join(output_ba_dir, f'robust_BAI_hist_{sid}.png'))
         
         df_res.loc[i, 'RobustBA'] = BA
+        df_res.loc[i, 'RobustBAI'] = BAI
+        df_res.loc[i, 'RobustBAIPerc'] = BAI_perc
         df_res.loc[i, 'artifact_ratio'] = artifact_ratio
         df_res.loc[i, 'num_missing_stage'] = num_missing_stage
 

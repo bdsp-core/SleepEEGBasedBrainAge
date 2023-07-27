@@ -33,7 +33,7 @@ def run_luna(output_dir, sids, edf_paths, xml_paths, channels, stage, cfreq=13.5
     df = df[['sid', 'edf', 'xml']]
     df.to_csv(list_path, sep='\t', index=False, header=False)
 
-    #channels = [x.replace('-','_') for x in channels]
+    channels = [x.replace('-','_') for x in channels]
     
     # generate R code to convert luna output .db to .mat
     db_path = os.path.join(output_dir, f'luna_output_{now}.db')
@@ -75,7 +75,7 @@ write.csv(d3, "{csv_path}", row.names=F)
 if __name__=='__main__':
     cfreq = 13.5  # [Hz]
     cycles = 12
-    stage = 'NREM2'
+    stage = 'N2'
 
     # get list of files
     df = pd.read_excel('mastersheet.xlsx')

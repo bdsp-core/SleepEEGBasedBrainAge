@@ -1,6 +1,0 @@
-library(luna)
-k<-ldb("/data/edf_xml_for_luna/luna_output_004031_07062023.db")
-d1<-lx(k,"SPINDLES", "CH_F")
-d2<-lx(k,"SPINDLES", "CH")
-d3 <- merge(d1,d2,by=c("ID","CH"))
-write.csv(d3, "/data/edf_xml_for_luna/luna_output_004031_07062023.csv", row.names=F)

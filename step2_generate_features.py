@@ -122,8 +122,8 @@ if __name__=='__main__':
             ax_spec = fig.add_subplot(gs[1+chi], sharex=ax_ss)
             specs_db_ch = (specs_db[:,chi*2]+specs_db[:,chi*2+1])/2
             ax_spec.imshow(
-                    specs_db_ch.T, aspect='auto', origin='lower', cmap='turbo',
-                    vmin=-5, vmax=20,
+                    specs_db_ch.T, aspect='auto', origin='lower', cmap='jet',
+                    vmin=-5, vmax=15,
                     extent=(tt.min(), tt.max(), freq.min(), freq.max()))
             ax_spec.text(-0.05, 0.5, f'Avg {combined_EEG_channels[chi]}',
                 ha='center', va='center', transform=ax_spec.transAxes)
