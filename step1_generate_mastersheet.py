@@ -24,10 +24,13 @@ for i in range(N):
 # this is an example but in reality, generate this programmably
 df = pd.DataFrame(data={
     'SID':[os.path.basename(x[:x.rfind('.')]) for x in signal_paths],
-    'Age':[np.nan]*N,
-    'Sex':[np.nan]*N,
-    'BMI':[np.nan]*N,
-    'SignalPath':signal_paths,
+    'Age':[np.nan]*N,            # required
+    'Sex':[np.nan]*N,            # optional, can be empty
+    'BMI':[np.nan]*N,            # optional, can be empty
+    'SignalPath':signal_paths,   # must be absolute path
+    # if no staging file, do automatic sleep staging
+    #'AnnotPath':annot_paths,    # must be absolute path  # different datasets have different format
     })
 
+# output
 df.to_excel('mastersheet.xlsx', index=False)

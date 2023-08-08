@@ -57,6 +57,7 @@ write.csv(d3, "{csv_path}", row.names=F)
     #    stdout=FNULL, stderr=subprocess.STDOUT)
     subprocess.check_call(['Rscript', r_code_path])#, stdout=FNULL, stderr=subprocess.STDOUT)
     
+    # it outputs all luna features
     df = pd.read_csv(csv_path)
     
     # delete intermediate files

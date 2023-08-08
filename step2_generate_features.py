@@ -54,11 +54,12 @@ if __name__=='__main__':
     clean_only = True
     newFs = 200.
     stages = ['W','N1','N2','N3','R']
-    stage2num = {'W':5,'R':4,'N1':3,'N2':2,'N3':1}
+    stage2num = {'W':5,'R':4,'N1':3,'N2':2,'N3':1}  # sleep staging encoding is different from ones on NSRR
+    # if we run step2, we need to map
     num2stage = {stage2num[x]:x for x in stage2num}
     minimum_epochs_per_stage = 2
 
-    # load sleep staging model
+    # load sleep staging model  #TODO if there is annotation file, use the annotation file
     sleep_stager = conv_model(num_classes=5)
     sleep_stager.load_weights('sleep_staging_deep_learning/model.hdf5')
     sleep_stager_hmm = joblib.load('sleep_staging_deep_learning/hmm.joblib')
@@ -83,18 +84,29 @@ if __name__=='__main__':
         
         # load dataset
         EEG, Fs, EEG_channels, combined_EEG_channels, combined_EEG_channels_ids, start_time = load_edf(signal_path)
+        # this part should be customized according to how moonlight works
+        # EEG is array of (#channels, # sample points) in uV
+        # Fs is sampling rate in Hz
+        # EEG_channels is array of channel names, assume EEG_channels = ['C3-M2', 'C4-M1']
+        # combined_EEG_channels = ['C']
+        # combined_EEG_channels_ids = [[0,1]]
 
         # segment EEG
         epochs, epoch_start_idx, epoch_status, specs, freq, qs = segment_EEG(EEG, epoch_length, epoch_length, Fs, newFs, notch_freq=line_freq, bandpass_freq=bandpass_freq, amplitude_thres=amplitude_thres, n_jobs=n_jobs)
+        # epochs.shape = (#epochs, #channels, # sample points in one epoch)
+        # the last output 'qs' is for amplitude normalization, it stands for 'quantiles' of signal amplitude, it contains q1 (25% percentile), q3 (75% percentile)
+        # (signal - q1)/(q3-q1)
         if epochs.shape[0] <= 0:
             raise ValueError('Empty EEG segments')
-        Fs = newFs
+        Fs = newFs  # in the segment_EEG function, the output epochs is resampled to 200Hz
         specs_db = 10*np.log10(specs)
+        # specs_db is only for plotting
 
         # sleep staging
         sleep_stages = do_sleep_staging(epochs, sleep_stager, sleep_stager_hmm)
 
         # plot spectrogram and sleep stages
+        # plot start
         plt.close()
         fig = plt.figure(figsize=(13.8,8.4))
         gs = fig.add_gridspec(1+len(combined_EEG_channels), 1, height_ratios=[1]+[3]*len(combined_EEG_channels))
@@ -137,6 +149,7 @@ if __name__=='__main__':
         plt.tight_layout()
         plt.subplots_adjust(hspace=0.11)
         plt.savefig(figure_path, bbox_inches='tight', pad_inches=0.03)
+        # plot end
 
         if clean_only:
             good_ids = np.where(epoch_status=='clean')[0]
@@ -160,10 +173,13 @@ if __name__=='__main__':
             2, 1, return_feature_names=True,
             combined_channel_names=combined_EEG_channels,
             n_jobs=n_jobs, verbose=True)
+        # features is a array/matrix (dataframe in R), shape = (#epochs, #features)
+        # feature_names is a array of feature names
         artifact_ratio = 1-len(sleep_stages)/len(epoch_status)
         num_missing_stage = 5-len(set(sleep_stages[~np.isnan(sleep_stages)]))
         
         myprint(epoch_status)
+        # save the mat file
         sio.savemat(feature_path1, {
             'start_time':start_time.strftime('%Y-%m-%d %H:%M:%S'),
             #'EEG_feature_names':feature_names,
@@ -183,11 +199,16 @@ if __name__=='__main__':
             'num_missing_stage':num_missing_stage,
             })
                 
+        # the next steps are to save the csv file
+
         # log-transform brain age features
         features_no_log = np.array(features)
         features = np.sign(features)*np.log1p(np.abs(features))
         
         # average features across sleep stages
+        # the resulting feature always has fixed dimension,
+        # if there is any missing stage, the features for that stage is NA
+        # the NA values will be imputed using the training data (KNN imputation)
         X = []
         X_no_log = []
         for stage in stages:
@@ -201,12 +222,17 @@ if __name__=='__main__':
         X = np.concatenate(X)
         X_no_log = np.concatenate(X_no_log)
         
+        # save X to .csv file
         cols = np.concatenate([[x.strip()+'_'+stage for x in feature_names] for stage in stages])
         df_feat = pd.DataFrame(data=X.reshape(1,-1), columns=cols)
         df_feat.insert(0, 'SID', sid)
         df_feat.to_csv(feature_path2, index=False)
 
+        # save X_no_log to .csv file
         df_feat = pd.DataFrame(data=X_no_log.reshape(1,-1), columns=cols)
         df_feat.insert(0, 'SID', sid)
         df_feat.to_csv(feature_path2.replace('.csv','_no_log.csv'), index=False)
+
+
+        # the output from step2 (to be used from step5 (compute BA)) is a csv file
         

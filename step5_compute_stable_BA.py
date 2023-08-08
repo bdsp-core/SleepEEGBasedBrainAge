@@ -19,18 +19,22 @@ def main():
     sys.path.insert(0, brain_age_dir)
     with open(os.path.join(brain_age_dir, 'stable_brain_age_model.pickle'), 'rb') as ff:
         model = pickle.load(ff)
+    #TODO save the coef separately
     
     # get list of subjects
     df = pd.read_excel('mastersheet.xlsx')
     feature_dir = 'features'
     
+    # optional, this is for converting brain age index (BA-CA) into percent
     df_ref = pd.read_csv('BAI_MGH_healthy.csv')
 
     # read features
     df_res = df.drop(columns='SignalPath')
     for i in tqdm(range(len(df))):
         sid = df.SID.iloc[i]
+        # read non-spindle/SO features from the csv file
         df_feat = pd.read_csv(os.path.join(feature_dir, f'features_{sid}_no_log.csv'))
+
         mat = sio.loadmat(os.path.join(feature_dir, f'features_{sid}.mat'),
                 variable_names=['EEG_channels',
                     'combined_EEG_channels', 'combined_EEG_channels_ids',
@@ -49,11 +53,10 @@ def main():
             for stage in stages:
                 df_feat[f'kurtosis_{stage}_{c2}'] = (df_feat[f'kurtosis_{EEG_channels[c1[0]]}_{stage}']+df_feat[f'kurtosis_{EEG_channels[c1[1]]}_{stage}'])/2
             
-        # read spindle features
+        # read spindle/SO features
         df_sp = pd.read_csv(os.path.join(feature_dir, f'spindle_features_{sid}.csv'))
         
-        # compute brain age
-        # model contains all preprocessing and adjustment steps
+        # combine the non-spindle/SO features and spindle/SO features
         X = df_feat.merge(df_sp, on='SID', how='inner')[feature_names].values
 
         # COUPL_OVERLAP has different mean, remove that feature
@@ -74,13 +77,14 @@ def main():
             print(f'Unknown sex encoding (M or 1, F or 0): {sex}\nIgnore it.')
             sex = np.nan
 
+        # compute brain age
         age2 = 70 if pd.isna(age) else age
         BA = model.predict(X, y=age2)[0]
 
         # get BAI
         BAI = BA-age
 
-        # get BAI percent
+        # (optional) get BAI percent
         BAI_perc = np.nan
         if pd.notna(BAI) and (pd.notna(age)|pd.notna(sex)|pd.notna(bmi)):
             BAI_perc, hist = get_perc(BAI, age, sex, bmi, df_ref, 'BAI', plot=True, fig_path=os.path.join(output_ba_dir, f'robust_BAI_hist_{sid}.png'))
