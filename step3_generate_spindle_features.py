@@ -1,5 +1,6 @@
 import datetime
 import os
+import shutil
 import subprocess
 import numpy as np
 import scipy.io as sio
@@ -95,29 +96,36 @@ if __name__=='__main__':
         signal_path = df.SignalPath.iloc[i]
         assert signal_path.lower().endswith('.edf'), f'signal file must be EDF, found {signal_path}'
 
-        edf_path = signal_path
+        # get sleep stages
+        sleep_stage_path = os.path.join(output_dir, f'features_{sid}.mat')
+        mat = sio.loadmat(sleep_stage_path, variable_names=['sleep_stages', 'Fs', 'EEG_channels', 'combined_EEG_channels', 'combined_EEG_channels_ids'])
+        sleep_stages = mat['sleep_stages'].flatten().astype(int)
+        Fs = float(mat['Fs'])
+        #EEG_channels = np.char.strip(mat['EEG_channels'].flatten())
+        EEG_channels = ['EEG_sec', 'EEG']
+        combined_EEG_channels = np.char.strip(mat['combined_EEG_channels'].flatten())
+        combined_EEG_channels_ids = mat['combined_EEG_channels_ids']
+        
+        edf_path = os.path.join(xml_edf_dir, sid2+'.edf')
         xml_path = os.path.join(xml_edf_dir, sid2+'.xml')
         assert edf_path.count(' ')==0 and xml_path.count(' ')==0, f'signal path cannot have space, found {edf_path}'
 
-        # get sleep stages
-        sleep_stage_path = os.path.join(output_dir, f'features_{sid}.mat')
-        mat = sio.loadmat(sleep_stage_path, variable_names=['sleep_stages', 'Fs', 'EEG_channels', 'combined_EEG_channels'])
-        sleep_stages = mat['sleep_stages'].flatten().astype(int)
-        Fs = float(mat['Fs'])
-        EEG_channels = np.char.strip(mat['EEG_channels'].flatten())
-        combined_EEG_channels = np.char.strip(mat['combined_EEG_channels'].flatten())
-        
         #if not os.path.exists(edf_path):
         #    signal_len, Fs, start_time, annot = convert_to_edf(signal_path, annot_path, edf_path, dataset)
+        shutil.copyfile(signal_path, edf_path)
         #if not os.path.exists(xml_path):
         convert_to_xml(sleep_stages, xml_path, Fs)
 
+        import pdb;pdb.set_trace()
         df_res = run_luna(xml_edf_dir, [sid2], [edf_path], [xml_path],
             EEG_channels, stage, cfreq=cfreq, cycles=cycles)
+
+        os.remove(edf_path)
+        os.remove(xml_path)
         
-        # make one row per subject
-        for chn in combined_EEG_channels:
-            df_res.loc[df_res.CH.str.startswith(chn),'CH2'] = chn
+        # average between left and right
+        for chn, chn_ids in zip(combined_EEG_channels, combined_EEG_channels_ids):
+            df_res.loc[chn_ids,'CH2'] = chn
         df_res = df_res.iloc[:,3:].groupby('CH2').agg('mean').reset_index()
 
         df_res2 = []

@@ -14,7 +14,8 @@ def main():
     os.makedirs(output_ba_dir, exist_ok=True)
     
     # load brain age model
-    brain_age_dir = 'brain_age_model_fco'
+    #brain_age_dir = 'brain_age_model_fco'
+    brain_age_dir = 'brain_age_model_c'
     feature_names = list(pd.read_csv(os.path.join(brain_age_dir, 'BA_features_used.csv')).feature.values)
     sys.path.insert(0, brain_age_dir)
     with open(os.path.join(brain_age_dir, 'stable_brain_age_model.pickle'), 'rb') as ff:
@@ -29,7 +30,7 @@ def main():
     df_ref = pd.read_csv('BAI_MGH_healthy.csv')
 
     # read features
-    df_res = df.drop(columns='SignalPath')
+    df_res = df.drop(columns=['SignalPath', 'AnnotPath'], errors='ignore')
     for i in tqdm(range(len(df))):
         sid = df.SID.iloc[i]
         # read non-spindle/SO features from the csv file

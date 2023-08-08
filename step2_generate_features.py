@@ -14,11 +14,11 @@ matplotlib.rc('font', **{'size': 14})
 import matplotlib.pyplot as plt
 import seaborn
 seaborn.set_style('ticks')
-from myfunc import load_edf
+from myfunc import load_shhs_data
 from segment_EEG import segment_EEG
 from extract_features_parallel import extract_features
-sys.path.insert(0,'sleep_staging_deep_learning')
-from models import *
+#sys.path.insert(0,'sleep_staging_deep_learning')
+#from models import *
 
 
 def myprint(epoch_status):
@@ -27,6 +27,7 @@ def myprint(epoch_status):
         print(f'{k}: {v}/{len(epoch_status)}, {v*100./len(epoch_status)}%')
 
 
+"""
 def do_sleep_staging(epochs, sleep_stager, sleep_stager_hmm):
     epochs2 = epochs.transpose(0,2,1)
     sleep_stages = [sleep_stager.predict(epochs2[...,[x]], verbose=False) for x in range(epochs2.shape[-1])]
@@ -43,6 +44,7 @@ def do_sleep_staging(epochs, sleep_stager, sleep_stager_hmm):
             sleep_stages[:ll] = 5
         break
     return sleep_stages
+"""
 
 
 if __name__=='__main__':
@@ -59,10 +61,10 @@ if __name__=='__main__':
     num2stage = {stage2num[x]:x for x in stage2num}
     minimum_epochs_per_stage = 2
 
-    # load sleep staging model  #TODO if there is annotation file, use the annotation file
-    sleep_stager = conv_model(num_classes=5)
-    sleep_stager.load_weights('sleep_staging_deep_learning/model.hdf5')
-    sleep_stager_hmm = joblib.load('sleep_staging_deep_learning/hmm.joblib')
+    # load sleep staging model  # if there is annotation file, use the annotation file
+    #sleep_stager = conv_model(num_classes=5)
+    #sleep_stager.load_weights('sleep_staging_deep_learning/model.hdf5')
+    #sleep_stager_hmm = joblib.load('sleep_staging_deep_learning/hmm.joblib')
 
     # get list of files
     df = pd.read_excel('mastersheet.xlsx')
@@ -77,15 +79,18 @@ if __name__=='__main__':
     for si in tqdm(range(len(df))):
         sid = df.SID.iloc[si]
         age = df.Age.iloc[si]
+        sex = df.Sex.iloc[si]
         signal_path = df.SignalPath.iloc[si]
+        annot_path  = df.AnnotPath.iloc[si]
         feature_path1 = os.path.join(output_feature_dir, f'features_{sid}.mat')
         feature_path2 = os.path.join(output_feature_dir, f'features_{sid}.csv')
         figure_path = os.path.join(output_sleep_vis_dir, sid+'.png')
         
         # load dataset
-        EEG, Fs, EEG_channels, combined_EEG_channels, combined_EEG_channels_ids, start_time = load_edf(signal_path)
+        EEG, sleep_stages, Fs, EEG_channels, combined_EEG_channels, combined_EEG_channels_ids, start_time = load_shhs_data(signal_path, annot_path)
         # this part should be customized according to how moonlight works
         # EEG is array of (#channels, # sample points) in uV
+        # sleep_stages is array of (# sample points)
         # Fs is sampling rate in Hz
         # EEG_channels is array of channel names, assume EEG_channels = ['C3-M2', 'C4-M1']
         # combined_EEG_channels = ['C']
@@ -103,7 +108,14 @@ if __name__=='__main__':
         # specs_db is only for plotting
 
         # sleep staging
-        sleep_stages = do_sleep_staging(epochs, sleep_stager, sleep_stager_hmm)
+        #sleep_stages = do_sleep_staging(epochs, sleep_stager, sleep_stager_hmm)
+        sleep_stages = sleep_stages[epoch_start_idx]
+        # stage encoding:
+        # W 5
+        # R 4
+        # N1 3
+        # N2 2
+        # N3 1
 
         # plot spectrogram and sleep stages
         # plot start
@@ -191,8 +203,8 @@ if __name__=='__main__':
             'EEG_frequency':freq,
             'sleep_stages':sleep_stages,
             'epoch_start_idx':epoch_start_idx,
-            #'age':age,
-            #'gender':df.Gender.iloc[si],
+            'age':age,
+            'sex':sex,
             'epoch_status':epoch_status,
             'Fs':Fs,
             'artifact_ratio':artifact_ratio,

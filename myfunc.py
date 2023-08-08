@@ -1,10 +1,45 @@
 import datetime
 import re
 import numpy as np
+import xmltodict
 import mne
 
 
-def load_edf(path):
+def load_shhs_data(signal_path, annot_path):
+    edf = mne.io.read_raw_edf(signal_path, stim_channel=None, preload=False, verbose=False)
+    eeg = edf.get_data(picks=['EEG(sec)', 'EEG'])
+    Fs = edf.info['sfreq']
+    eeg_channels = ['C3-M2', 'C4-M1']
+    start_time = edf.info['meas_date'].replace(tzinfo=None)
+    combined_EEG_channels = ['C']
+    combined_EEG_channels_ids = [[0,1]]
+
+    # convert to uV
+    eeg = eeg*1e6
+
+    # get sleep stages
+    mapping = {
+        0:5,  # W/W
+        1:3,  # N1/S1
+        2:2,  # N2/S2
+        3:1,  # N3/S3
+        4:1,  # N3/S4
+        5:4,  # R/REM
+            }
+    with open(annot_path,'r') as ff:
+        annot = xmltodict.parse(ff.read())
+    ss = np.array(annot['CMPStudyConfig']['SleepStages']['SleepStage']).astype(int)
+    epoch_time = float(annot['CMPStudyConfig']['EpochLength'])
+    epoch_size = int(round(epoch_time*Fs))
+    sleep_stages = np.zeros(eeg.shape[1])+np.nan
+    for i, s in enumerate(ss):
+        sleep_stages[i*epoch_size:(i+1)*epoch_size] = mapping.get(s, np.nan)
+
+    return eeg, sleep_stages, Fs, eeg_channels, combined_EEG_channels, combined_EEG_channels_ids, start_time
+
+
+
+def load_bidmc_edf(path):
     edf = mne.io.read_raw_edf(path, stim_channel=None, preload=False, verbose=False)
     edf_channels = edf.info['ch_names']
     Fs = edf.info['sfreq']

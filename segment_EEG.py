@@ -47,6 +47,7 @@ def segment_EEG(EEG, window_time, step_time, Fs, newFs=200, notch_freq=None, ban
     start_ids = np.arange(0, EEG.shape[1]-window_size+1, step_size)
     if start_end_remove_window_num>0:
         start_ids = start_ids[start_end_remove_window_num:-start_end_remove_window_num]
+    start_ids_original = np.array(start_ids)
     
     # first assign clean to all epoch status
     epoch_statuss = [epoch_status_explanation[0]]*len(start_ids)
@@ -117,14 +118,6 @@ def segment_EEG(EEG, window_time, step_time, Fs, newFs=200, notch_freq=None, ban
     for i in flat1d:
         epoch_statuss[i] = epoch_status_explanation[4]
      
-    lens = [len(EEG_segs), len(start_ids), len(epoch_statuss), len(specs)]
-    if len(set(lens))>1:
-        minlen = min(lens)
-        EEG_segs = EEG_segs[:minlen]
-        start_ids = start_ids[:minlen]
-        epoch_statuss = epoch_statuss[:minlen]
-        specs = specs[:minlen]
-
-    return EEG_segs, start_ids, np.array(epoch_statuss), specs, freq, qs
+    return EEG_segs, start_ids_original, np.array(epoch_statuss), specs, freq, qs
 
 

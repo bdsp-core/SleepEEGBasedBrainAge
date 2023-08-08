@@ -1,0 +1,14 @@
+,mean,std
+theta_bandpower_kurtosis_C_N2,7.46162965,2.5574401
+alpha_bandpower_kurtosis_C_N2,7.33154885,2.59845088
+kurtosis_N2_C,2.8510925,1.34910998
+delta_theta_mean_C_N3,1.22491537,0.458185908
+delta_alpha_mean_C_N3,1.34399072,0.548410626
+delta_bandpower_mean_C_N3,1.44500033,0.618703915
+theta_bandpower_kurtosis_C_N3,5.36434049,2.04592795
+delta_bandpower_kurtosis_C_N2,17.017404,4.07117585
+kurtosis_N3_C,1.08606488,0.576482078
+COUPL_OVERLAP_C,366.302452,191.716141
+DENS_C,4.51358313,1.91159981
+sigma_bandpower_kurtosis_C_N2,15.1965052,4.74928702
+alpha_bandpower_mean_C_N1,0.068192904,0.047435647
