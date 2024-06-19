@@ -1,3 +1,11 @@
+## Important Note
+
+The sleep EEG-based brain age index (BAI) has been transitioned to the Luna package: [https://zzz.bwh.harvard.edu/luna/ref/predict/](https://zzz.bwh.harvard.edu/luna/ref/predict/)
+
+Please check out the documentation there. Thanks!
+
+The repo here is outdated.
+
 ## Steps
 Output: mastersheet.xlsx
 
